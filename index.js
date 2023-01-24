@@ -13,7 +13,7 @@ console.log(mCommon.dateTimeStr(new Date()));
 
 global.gModel = new Object();
 global.gModel.category = require('./model/category');
-// global.gModel.member = require('./model/member');
+global.gModel.member = require('./model/member');
 global.gModel.sess = require('./model/sess');
 
 setTimeout(function() {

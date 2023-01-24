@@ -148,7 +148,10 @@ module.exports = class LoServer{
 
             let category = await gModel.category.getByName(args.game);
             mCommon.log(`${mCommon.pk.LoginRequest}: 2 `); 
-            if(category){
+            if(!category){
+                result = mCommon.def.STATUS_FAIL;
+                code = mCommon.def.CODE_STOP;
+            } else {
                 let sess = await gModel.sess.getById(args.game, args.session);
                 mCommon.log(`${mCommon.pk.LoginRequest}: 3 `); 
                 if(!sess) {
@@ -190,35 +193,46 @@ module.exports = class LoServer{
         let args = pack.args;
 
         args.masterId = args.masterId.trim();
-        if(args.masterId){
-            let result = mCommon.def.STATUS_FAIL, code = mCommon.def.CODE_FAIL;
-            if(this.isExistId(client.member.category, args.masterId)){
+        let result = mCommon.def.STATUS_FAIL, code = mCommon.def.CODE_FAIL;
+
+        if(!client.isLogin){
+            result = mCommon.def.STATUS_FAIL;
+            code = mCommon.def.CODE_OUT;
+        } else if(args.masterId){
+            let member = await gModel.member.getByUid(client.member.category, args.masterId);
+            if(!member){
+                result = mCommon.def.STATUS_FAIL;
+                code = mCommon.def.CODE_ERROR;
+            } else {
                 client.member.master = args.masterId;
 
-                result = mCommon.def.STATUS_SUCCESS;
-                code = mCommon.def.CODE_OK;
+                if(!this.isExistId(client.member.category, args.masterId)){
+                    result = mCommon.def.STATUS_FAIL;
+                    code = mCommon.def.CODE_OUT;
+                } else {
+                    result = mCommon.def.STATUS_SUCCESS;
+                    code = mCommon.def.CODE_OK;
+                }
             }
-
-            let resArgs = {result:result, code:code};
-                
-            let sendPack = mCommon.makePack(mCommon.pk.SetMasterResponse, resArgs);
-            client.send(sendPack);
-    
+            
         }
-        
+        let resArgs = {result:result, code:code};
+                
+        let sendPack = mCommon.makePack(mCommon.pk.SetMasterResponse, resArgs);
+        client.send(sendPack);
     }
     
     async onEnterTableRequest(client, pack){
         let args = pack.args;
         args.tableId = args.tableId.trim();
-        if(args.tableId){
+        
+        if(client.isLogin && args.tableId){
             
             let resArgs = {tableId:args.tableId};
                 
             let sendPack = mCommon.makePack(mCommon.pk.OnEnterRoomReponse, resArgs);
 
-            if(client.isLogin)
-                this.sendMsgToSlave(sendPack, client.member.mb_uid);
+            this.sendMsgToSlave(sendPack, client.member.mb_uid);
     
         }
     }
@@ -226,12 +240,11 @@ module.exports = class LoServer{
     async onBettingRequest(client, pack){
         let args = pack.args;
         
-        if(args.tableId && args.side && args.money){
+        if(client.isLogin && args.tableId && args.side && args.money){
             
             let sendPack = mCommon.makePack(mCommon.pk.OnBettingResponse, args);
 
-            if(client.isLogin)
-                this.sendMsgToSlave(sendPack, client.member.mb_uid);
+            this.sendMsgToSlave(sendPack, client.member.mb_uid);
     
         }
     }

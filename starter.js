@@ -51,13 +51,13 @@ class Starter {
 
     async check() {
 
-        this.tkCheck = setInterval(async () => {
+        // this.tkCheck = setInterval(async () => {
             
-        }, 5000);
+        // }, 5000);
 
-        this.tkLong = setInterval(() => {
-            this.deleteLog();
-        }, 24 * 3600 * 1000);
+        // this.tkLong = setInterval(() => {
+        //     this.deleteLog();
+        // }, 24 * 3600 * 1000);
 
     }
 
