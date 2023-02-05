@@ -30,7 +30,7 @@ class Starter {
             const path = url.parse(request.url, true);
             // console.log(path.pathname);
             try {
-                if (path.pathname === '/') {
+                if (path.pathname === '/ws') {
                     gLoServer.server.handleUpgrade(request, socket, head, function done(ws) {
                         gLoServer.server.emit('connection', ws, request);
                     });

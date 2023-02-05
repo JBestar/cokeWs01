@@ -142,7 +142,7 @@ module.exports = class LoServer{
     
     async onLoginRequest(client, pack){
         let args = pack.args;
-        if(args.game && args.session){
+        if(args.game !== undefined){
             let result = mCommon.def.STATUS_FAIL, code = mCommon.def.CODE_FAIL;
             mCommon.log(`${mCommon.pk.LoginRequest}: 1 `); 
 
@@ -165,7 +165,7 @@ module.exports = class LoServer{
                 } else {
                     mCommon.log(`${mCommon.pk.LoginRequest}: mb_uid=> ${sess.sess_mb_uid} Success `, true); 
                     client.isLogin = true;
-                    client.member = {sess_id:sess.sess_id, mb_uid:sess.sess_mb_uid, master:"", category:category.cat_name, updated:Date.now()};
+                    client.member = {sess_id:sess.sess_id, mb_uid:sess.sess_mb_uid, master:"", category:category.cat_name, tableId:"", updated:Date.now()};
                     result = mCommon.def.STATUS_SUCCESS;
                     code = mCommon.def.CODE_OK;
                 }
@@ -195,6 +195,7 @@ module.exports = class LoServer{
         args.masterId = args.masterId.trim();
         let result = mCommon.def.STATUS_FAIL, code = mCommon.def.CODE_FAIL;
 
+        let masterMember = null;
         if(!client.isLogin){
             result = mCommon.def.STATUS_FAIL;
             code = mCommon.def.CODE_OUT;
@@ -206,9 +207,11 @@ module.exports = class LoServer{
             } else {
                 client.member.master = args.masterId;
 
-                if(!this.isExistId(client.member.category, args.masterId)){
+                masterMember = this.getExistMember(client.member.category, args.masterId);
+                if(!masterMember || masterMember.master.length > 0){
                     result = mCommon.def.STATUS_FAIL;
                     code = mCommon.def.CODE_OUT;
+
                 } else {
                     result = mCommon.def.STATUS_SUCCESS;
                     code = mCommon.def.CODE_OK;
@@ -217,7 +220,10 @@ module.exports = class LoServer{
             
         }
         let resArgs = {result:result, code:code};
-                
+        if(masterMember){
+            resArgs.tableId = masterMember.tableId;
+        }
+
         let sendPack = mCommon.makePack(mCommon.pk.SetMasterResponse, resArgs);
         client.send(sendPack);
     }
@@ -227,7 +233,7 @@ module.exports = class LoServer{
         args.tableId = args.tableId.trim();
         
         if(client.isLogin && args.tableId){
-            
+            client.member.tableId = args.tableId;
             let resArgs = {tableId:args.tableId};
                 
             let sendPack = mCommon.makePack(mCommon.pk.OnEnterRoomReponse, resArgs);
@@ -266,4 +272,22 @@ module.exports = class LoServer{
         return false;
     }
 
+    getExistMember(category, uid){
+        var clients = this.server.clients;
+
+        let member = null;
+        for(let client of clients){
+            if(client.readyState !== WebSocket.OPEN)
+                continue;
+                
+            if(! client.isLogin)
+                continue;
+            
+            if(client.member.category == category && client.member.mb_uid === uid ){
+                member = client.member;
+                break;
+            }
+        }
+        return member;
+    }
 }
