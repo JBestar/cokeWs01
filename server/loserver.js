@@ -201,9 +201,12 @@ module.exports = class LoServer{
             code = mCommon.def.CODE_OUT;
         } else if(args.masterId){
             let member = await gModel.member.getByUid(client.member.category, args.masterId);
-            if(!member){
+            if(args.masterId === client.member.mb_uid){
                 result = mCommon.def.STATUS_FAIL;
-                code = mCommon.def.CODE_ERROR;
+                code = mCommon.def.CODE_ERROR;   //no master
+            } else if(!member){
+                result = mCommon.def.STATUS_FAIL;
+                code = mCommon.def.CODE_ERROR;   //no master
             } else {
                 client.member.master = args.masterId;
 
