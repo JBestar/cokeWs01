@@ -84,7 +84,7 @@ module.exports = class LoServer{
                         client.isLogin = false;
                     else {
                         loginClients.push(client);
-                        mCommon.log(`Connecting: ${client.session} ID: ${client.member.mb_uid}`); 
+                        mCommon.log(`Connecting: ${client.session} ID: ${client.member.mb_uid} (${client.member.category})`); 
                     }
 
                 } else {
@@ -171,11 +171,11 @@ module.exports = class LoServer{
         let resArgs = {result:result, code:code};
         let sendPack = mCommon.makePack(mCommon.pk.MasterStateChanged, resArgs);
         
-        this.sendMsgToSlave(sendPack, uid, true);
+        this.sendMsgToSlave(sendPack, client.member.category, uid, true);
 
     }
 
-    async sendMsgToSlave(message, master, log=true){
+    async sendMsgToSlave(message, category, master, log=true){
             
         var clients = this.server.clients;
 
@@ -184,7 +184,10 @@ module.exports = class LoServer{
                 continue;
             if(!client.isLogin)
                 continue;
-            if(client.member.master === master){
+
+            // mCommon.log(`Client ${client.member.mb_uid} category:${client.member.category} master:${client.member.master} `); 
+
+            if(client.member.master === master && client.member.category === category){
                 if(log)
                     mCommon.log(`${client.member.mb_uid} <== ${message}`);
                 client.send(message);
@@ -234,14 +237,13 @@ module.exports = class LoServer{
 
             let resArgs = {result:result, code:code};
             let sendPack = mCommon.makePack(mCommon.pk.LoginResponse, resArgs);
-            
             client.send(sendPack);
 
             if(client.isLogin){
-                sendPack = mCommon.makePack(mCommon.pk.MasterStateChanged, resArgs);
-                this.sendMsgToSlave(sendPack, client.member.mb_uid, true);
-
                 mCommon.log(`${client.member.mb_uid} <== ${sendPack}`);
+
+                sendPack = mCommon.makePack(mCommon.pk.MasterStateChanged, resArgs);
+                this.sendMsgToSlave(sendPack, client.member.category, client.member.mb_uid, true);
             }
             else{
                 mCommon.log(`${client.session} <== ${sendPack}`);
@@ -294,15 +296,18 @@ module.exports = class LoServer{
     
     async onEnterTableRequest(client, pack){
         let args = pack.args;
-        args.tableId = args.tableId.trim();
         
-        if(client.isLogin && args.tableId){
+        // mCommon.log(`${client.member.mb_uid} ${client.isLogin}, ${args.tableId !== undefined}`);
+
+        if(client.isLogin && args.tableId !== undefined){
+            args.tableId = args.tableId.trim();
             client.member.tableId = args.tableId;
             let resArgs = {tableId:args.tableId};
                 
             let sendPack = mCommon.makePack(mCommon.pk.OnEnterRoomReponse, resArgs);
+            // mCommon.log(`${client.member.mb_uid} sendMsgToSlave <== OnEnterRoomReponse`);
 
-            this.sendMsgToSlave(sendPack, client.member.mb_uid);
+            this.sendMsgToSlave(sendPack, client.member.category, client.member.mb_uid);
     
         }
     }
@@ -310,11 +315,12 @@ module.exports = class LoServer{
     async onBettingRequest(client, pack){
         let args = pack.args;
         
-        if(client.isLogin && args.tableId && args.side && args.money){
+        if(client.isLogin && args.tableId !== undefined && args.side !== undefined && args.money !== undefined){
             
             let sendPack = mCommon.makePack(mCommon.pk.OnBettingResponse, args);
+            // mCommon.log(`${client.member.mb_uid} sendMsgToSlave <== onBettingRequest`);
 
-            this.sendMsgToSlave(sendPack, client.member.mb_uid);
+            this.sendMsgToSlave(sendPack, client.member.category, client.member.mb_uid);
     
         }
     }
