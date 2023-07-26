@@ -1,6 +1,6 @@
 class Sess{
     
-    fields = ['sess_id', 'sess_emp_fid', 'sess_mb_uid'];
+    fields = ['sess_id', 'sess_time_begin', 'sess_time_last', 'sess_emp_fid', 'sess_mb_uid'];
 
     getTableName(game){
         return "tbl_"+game+"_session"
@@ -28,6 +28,29 @@ class Sess{
         }
     }
 
+    async getByIds(game, ids){
+        if(!ids || ids.length < 1)
+            return null;
+
+        let table = this.getTableName(game);
+
+        let strIds = ids.join("','");
+        let tbColum = this.fields.join(', ');
+        let conn = await gDbAsynPool.getConnection(async conn => conn);
+
+        let sql = `SELECT ${tbColum} FROM ${table} WHERE sess_id IN ( '${strIds}' ) `;
+        // mCommon.log( `sess >>  getByIds sql: ${sql}`);
+        try{
+            let [data, ] = await conn.execute(sql);
+            await conn.unprepare(sql);
+            await conn.release();
+            return data;
+        } catch(err){
+            await conn.release();
+            // mCommon.log( `sess >>  getByIds Error: ${err}`);
+            return null;
+        }
+    }
 
 
 }

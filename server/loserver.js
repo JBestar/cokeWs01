@@ -71,16 +71,21 @@ module.exports = class LoServer{
         
         setInterval( async () => {
 
-            var closeClients = [];
+            let tmNow = Date.now(); 
+            let loginClients = [];
+            let closeClients = [];
             for(let client of server.clients) {
 
-                if(Date.now() - client.openAt < 10000 )
+                if(tmNow - client.openAt < 10000 )
                     return;
 
                 if(client.isLogin){
-                    if(Date.now() - client.member.updated > 120000)
+                    if(tmNow - client.member.updated > 300000)
                         client.isLogin = false;
-                    else mCommon.log(`Connecting: ${client.session} ID: ${client.member.mb_uid}`); 
+                    else {
+                        loginClients.push(client);
+                        mCommon.log(`Connecting: ${client.session} ID: ${client.member.mb_uid}`); 
+                    }
 
                 } else {
                     closeClients.push(client);
@@ -91,6 +96,62 @@ module.exports = class LoServer{
                 closeClients.forEach(function(client){
                     client.close();
                     mCommon.log(`Client ${client.session} Closed `); 
+                });
+            }
+
+            if(loginClients.length > 0){
+
+                let clientMap = new Map();
+                let clientArr = null;
+                let cat = "";
+                for(let client of loginClients) {
+                    
+                    if(cat !== client.member.category){
+                        if(cat.length > 0)
+                            clientMap.set(cat, clientArr); 
+                        clientArr = [];
+                        cat = client.member.category
+                    }
+                    clientArr.push(client);
+                }
+                clientMap.set(cat, clientArr); 
+
+                clientMap.forEach(async (clientArr, cat) => {
+                    // mCommon.log(`clientMap ${cat} => clientCount = ${clientArr.length} `); 
+
+                    let sessIds = [];
+                    for(let client of clientArr) {
+                        sessIds.push(client.member.sess_id);
+                    }
+                    let arrSess = await gModel.sess.getByIds(cat, sessIds);
+
+                    let clientSess = null;
+                    for(let client of clientArr) {
+
+                        clientSess = null;
+                        if(client.member && arrSess && arrSess.length > 0){
+                            for(let sess of arrSess) {
+                                if(sess.sess_id === client.member.sess_id){
+                                    // mCommon.log(`clientMap ${cat} => sessId = ${sess.sess_id} `); 
+                                    clientSess = sess;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if(!clientSess){
+                            mCommon.log(`Client ${client.session} Closing...(1) `); 
+                            client.isLogin = false;
+                        } else {
+                            let tmLast = new Date(clientSess.sess_time_last).getTime();
+                            if(tmNow - tmLast > 300000){
+                                client.isLogin = false;
+                                mCommon.log(`Client ${client.session} Closing...(2) `); 
+                            }
+                        }
+
+                    }
+                    
                 });
             }
 
@@ -144,21 +205,21 @@ module.exports = class LoServer{
         let args = pack.args;
         if(args.game !== undefined){
             let result = mCommon.def.STATUS_FAIL, code = mCommon.def.CODE_FAIL;
-            mCommon.log(`${mCommon.pk.LoginRequest}: 1 `); 
+            // mCommon.log(`${mCommon.pk.LoginRequest}: 1 `); 
 
             let category = await gModel.category.getByName(args.game);
-            mCommon.log(`${mCommon.pk.LoginRequest}: 2 `); 
+            // mCommon.log(`${mCommon.pk.LoginRequest}: 2 `); 
             if(!category){
                 result = mCommon.def.STATUS_FAIL;
                 code = mCommon.def.CODE_STOP;
             } else {
                 let sess = await gModel.sess.getById(args.game, args.session);
-                mCommon.log(`${mCommon.pk.LoginRequest}: 3 `); 
+                // mCommon.log(`${mCommon.pk.LoginRequest}: 3 `); 
                 if(!sess) {
                     mCommon.log(`${mCommon.pk.LoginRequest}: sess=> ${args.session} Null `, true); 
                     result = mCommon.def.STATUS_FAIL;
                     code = mCommon.def.CODE_FAIL;
-                } else if(this.isExistId(category.cat_name, sess.sess_mb_uid)) {
+                } else if(this.isExistId(category.cat_name, sess.sess_id, sess.sess_mb_uid)) {
                     mCommon.log(`${mCommon.pk.LoginRequest}: mb_uid=> ${sess.sess_mb_uid} ExistId `, true); 
                     result = mCommon.def.STATUS_FAIL;
                     code = mCommon.def.CODE_DUPL;
@@ -258,7 +319,7 @@ module.exports = class LoServer{
         }
     }
 
-    isExistId(category, uid){
+    isExistId(category, sess_id, uid){
         var clients = this.server.clients;
 
         for(let client of clients){
@@ -268,7 +329,7 @@ module.exports = class LoServer{
             if(! client.isLogin)
                 continue;
             
-            if(client.member.category == category && client.member.mb_uid === uid ){
+            if(client.member.category == category && client.member.sess_id === sess_id && client.member.mb_uid === uid ){
                 return true;
             }
         }
