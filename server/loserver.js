@@ -62,8 +62,8 @@ module.exports = class LoServer{
 
             });
             
-            client.on('close', e => {
-                mCommon.log(`Lobby Server Client : ${client.session} Closed`);
+            client.on('close', (code, msg) => {
+                mCommon.log(`Lobby Server Client : ${client.session} Closed : code=${code}, msg=${msg}`);
                 this.onClientClosed(client);
             });
 
