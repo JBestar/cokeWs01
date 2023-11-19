@@ -43,7 +43,7 @@ module.exports = {
         MasterStateChanged : 'masterStateChanged',
         
         OnEnterTableRequest : 'onEnterTableRequest',
-        OnEnterRoomReponse : 'onEnterRoomReponse',
+        OnEnterTableResponse : 'onEnterTableResponse',
 
         OnBettingRequest : 'onBettingRequest',
         OnBettingResponse : 'onBettingResponse',

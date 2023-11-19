@@ -304,8 +304,8 @@ module.exports = class LoServer{
             client.member.tableId = args.tableId;
             let resArgs = {tableId:args.tableId};
                 
-            let sendPack = mCommon.makePack(mCommon.pk.OnEnterRoomReponse, resArgs);
-            // mCommon.log(`${client.member.mb_uid} sendMsgToSlave <== OnEnterRoomReponse`);
+            let sendPack = mCommon.makePack(mCommon.pk.OnEnterTableResponse, resArgs);
+            // mCommon.log(`${client.member.mb_uid} sendMsgToSlave <== OnEnterTableResponse`);
 
             this.sendMsgToSlave(sendPack, client.member.category, client.member.mb_uid);
     
