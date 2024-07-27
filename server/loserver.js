@@ -1,28 +1,20 @@
 const WebSocket = require('ws')
 const md5 = require('md5');
+var Mutex = require('async-mutex').Mutex;
 
 module.exports = class LoServer{
     constructor(){
         this.server = new WebSocket.Server({ noServer: true });
+        this.packMap = new Map();
+        this.info = {tmPack:Date.now(), lockMap:new Map()};
         this.create();
-    }
-
-    async stop(){
-        if(this.server){
-            var clients = this.server.clients;
-            clients.forEach(async function(client) {
-                mCommon.log(`>>Lobby Client: Id:${client.session} Closing...`);
-                client.close();
-
-            });
-        }
     }
 
     create() {
         
         var server = this.server;
         var pack = null;
-        mCommon.log("==================START==================");
+        mCommon.log("==================START==================", true);
 
         server.on('connection', client => {
 
@@ -35,9 +27,9 @@ module.exports = class LoServer{
                 else 
                     mCommon.log(`${client.session} => ${message}`);
 
-                pack = JSON.parse(message);
-
                 try {
+					pack = JSON.parse(message);
+					
                     switch(pack.type){
                         case mCommon.pk.LoginRequest:
                             this.onLoginRequest(client, pack);
@@ -45,8 +37,11 @@ module.exports = class LoServer{
                         case mCommon.pk.SetMasterRequest:
                             this.onSetMasterRequest(client, pack);
                             break;
-                        case mCommon.pk.OnEnterTableRequest:
-                            this.onEnterTableRequest(client, pack);
+                        // case mCommon.pk.OnEnterTableRequest:
+                        //     this.onEnterTableRequest(client, pack);
+                        //     break;
+                        case mCommon.pk.OnMsgResponse:
+                            this.onMsgResponse(client, pack);
                             break;
                         case mCommon.pk.OnBettingRequest:
                             this.onBettingRequest(client, pack);
@@ -57,14 +52,14 @@ module.exports = class LoServer{
                         default:break;
                     }
                 } catch(e){
-                    mCommon.log(`Lobby Server error : ${e}`);
+                    mCommon.log(`<OnMessage> (${client.session}) error : ${e}`, true);
                 }
 
             });
             
             client.on('close', (code, msg) => {
-                mCommon.log(`Lobby Server Client : ${client.session} Closed : code=${code}, msg=${msg}`);
-                this.onClientClosed(client);
+                mCommon.log(`<OnClose> (${client.session}) Closed : code=${code}, msg=${msg}`, true);
+                this.onClientClosed(client, code);
             });
 
         });
@@ -74,28 +69,38 @@ module.exports = class LoServer{
             let tmNow = Date.now(); 
             let loginClients = [];
             let closeClients = [];
+
+            if(tmNow - this.info.tmPack > 120000){
+                this.info.tmPack = tmNow;
+                this.procPackMap();
+
+                mCommon.log(`<Interval> Connect Cnt=${server.clients.size}`, true);
+            }
+
             for(let client of server.clients) {
 
                 if(tmNow - client.openAt < 10000 )
                     return;
 
                 if(client.isLogin){
-                    if(tmNow - client.member.updated > 300000)
+                    if(tmNow - client.member.updated > 300000){
                         client.isLogin = false;
-                    else {
+                        mCommon.log(`<Interval> (${client.session}) Closing : No Update `, false, true); 
+
+                    } else {
                         loginClients.push(client);
-                        mCommon.log(`Connecting: ${client.session} ID: ${client.member.mb_uid} (${client.member.category})`); 
+                        mCommon.log(`<Interval> (${client.session}) mb_uid=${client.member.mb_uid} (${client.member.category})`); 
                     }
 
                 } else {
                     closeClients.push(client);
+                    mCommon.log(`<Interval> (${client.session}) Closed : No Login`, false, true); 
                 }
             };
 
             if(closeClients.length > 0){
                 closeClients.forEach(function(client){
                     client.close();
-                    mCommon.log(`Client ${client.session} Closed `); 
                 });
             }
 
@@ -117,7 +122,6 @@ module.exports = class LoServer{
                 clientMap.set(cat, clientArr); 
 
                 clientMap.forEach(async (clientArr, cat) => {
-                    // mCommon.log(`clientMap ${cat} => clientCount = ${clientArr.length} `); 
 
                     let sessIds = [];
                     for(let client of clientArr) {
@@ -132,7 +136,6 @@ module.exports = class LoServer{
                         if(client.member && arrSess && arrSess.length > 0){
                             for(let sess of arrSess) {
                                 if(sess.sess_id === client.member.sess_id){
-                                    // mCommon.log(`clientMap ${cat} => sessId = ${sess.sess_id} `); 
                                     clientSess = sess;
                                     break;
                                 }
@@ -140,13 +143,13 @@ module.exports = class LoServer{
                         }
                         
                         if(!clientSess){
-                            mCommon.log(`Client ${client.session} Closing...(1) `); 
+                            mCommon.log(`<Interval> (${client.session}) Closing : DbSess is NULL `, true); 
                             client.isLogin = false;
                         } else {
                             let tmLast = new Date(clientSess.sess_time_last).getTime();
                             if(tmNow - tmLast > 300000){
                                 client.isLogin = false;
-                                mCommon.log(`Client ${client.session} Closing...(2) `); 
+                                mCommon.log(`<Interval> (${client.session}) Closing : DbSess No Update `, true); 
                             }
                         }
 
@@ -155,27 +158,30 @@ module.exports = class LoServer{
                 });
             }
 
-            mCommon.log(`Connect Cnt: ${server.clients.size}`);
         }, 30000);
         
     }
 
-    async onClientClosed(client){
+    async onClientClosed(client, closeCode){
         if(!client.member)
             return;
         
+        if(closeCode != 1006){
+            this.clearPackMap(client);
+        }
+
         let uid = client.member.mb_uid;
         let result = mCommon.def.STATUS_FAIL;
         let code = mCommon.def.CODE_OUT;
 
         let resArgs = {result:result, code:code};
-        let sendPack = mCommon.makePack(mCommon.pk.MasterStateChanged, resArgs);
-        
-        this.sendMsgToSlave(sendPack, client.member.category, uid, true);
+        let objPack = mCommon.makePack(mCommon.pk.MasterStateChanged, resArgs);
+        let sendMsg = JSON.stringify(objPack);
+        this.sendMsgToSlave(objPack.id, sendMsg, client.member.category, uid, false, true);
 
     }
 
-    async sendMsgToSlave(message, category, master, log=true){
+    async sendMsgToSlave(msgId, msg, category, master, save=false, log=false){
             
         var clients = this.server.clients;
 
@@ -185,12 +191,15 @@ module.exports = class LoServer{
             if(!client.isLogin)
                 continue;
 
-            // mCommon.log(`Client ${client.member.mb_uid} category:${client.member.category} master:${client.member.master} `); 
-
             if(client.member.master === master && client.member.category === category){
                 if(log)
-                    mCommon.log(`${client.member.mb_uid} <== ${message}`);
-                client.send(message);
+                    mCommon.log(`<SendMsgToSlave> (${client.session}) ${client.member.mb_uid} <== ${msg}`);
+
+                if(save){
+                    this.pushPackMap(client, msgId, msg);
+                }
+
+                client.send(msg);
             }
         }
     }
@@ -199,8 +208,9 @@ module.exports = class LoServer{
         client.member.updated = Date.now();
         
         let args = {t: mCommon.tmStamp(Date.now())};
-        let sendPack = mCommon.makePack(mCommon.pk.MetricsPong, args);
-        client.send(sendPack);
+        let objPack = mCommon.makePack(mCommon.pk.MetricsPong, args);
+        let sendMsg = JSON.stringify(objPack);
+        client.send(sendMsg);
     }
 
     
@@ -208,48 +218,284 @@ module.exports = class LoServer{
         let args = pack.args;
         if(args.game !== undefined){
             let result = mCommon.def.STATUS_FAIL, code = mCommon.def.CODE_FAIL;
-            // mCommon.log(`${mCommon.pk.LoginRequest}: 1 `); 
 
             let category = await gModel.category.getByName(args.game);
-            // mCommon.log(`${mCommon.pk.LoginRequest}: 2 `); 
             if(!category){
                 result = mCommon.def.STATUS_FAIL;
                 code = mCommon.def.CODE_STOP;
             } else {
                 let sess = await gModel.sess.getById(args.game, args.session);
-                // mCommon.log(`${mCommon.pk.LoginRequest}: 3 `); 
                 if(!sess) {
-                    mCommon.log(`${mCommon.pk.LoginRequest}: sess=> ${args.session} Null `, true); 
+                    mCommon.log(`<${mCommon.pk.LoginRequest}> (${client.session}) db_sess=${args.session} Null `, true); 
                     result = mCommon.def.STATUS_FAIL;
                     code = mCommon.def.CODE_FAIL;
                 } else if(this.isExistId(category.cat_name, sess.sess_id, sess.sess_mb_uid)) {
-                    mCommon.log(`${mCommon.pk.LoginRequest}: mb_uid=> ${sess.sess_mb_uid} ExistId `, true); 
+                    mCommon.log(`<${mCommon.pk.LoginRequest}> (${client.session}) mb_uid=${sess.sess_mb_uid}, db_sess=${sess.sess_id} ExistId `, true); 
                     result = mCommon.def.STATUS_FAIL;
                     code = mCommon.def.CODE_DUPL;
                 } else {
-                    mCommon.log(`${mCommon.pk.LoginRequest}: mb_uid=> ${sess.sess_mb_uid} Success `, true); 
+                    mCommon.log(`<${mCommon.pk.LoginRequest}> (${client.session}) mb_uid==${sess.sess_mb_uid}, db_sess=${sess.sess_id} Success `, true); 
                     client.isLogin = true;
                     client.member = {sess_id:sess.sess_id, mb_uid:sess.sess_mb_uid, master:"", category:category.cat_name, tableId:"", updated:Date.now()};
                     result = mCommon.def.STATUS_SUCCESS;
                     code = mCommon.def.CODE_OK;
+
+                    this.createPackMap(client);
                 }
             }
 
             let resArgs = {result:result, code:code};
-            let sendPack = mCommon.makePack(mCommon.pk.LoginResponse, resArgs);
-            client.send(sendPack);
+            let objPack = mCommon.makePack(mCommon.pk.LoginResponse, resArgs);
+            let sendMsg = JSON.stringify(objPack);
+            client.send(sendMsg);
 
             if(client.isLogin){
-                mCommon.log(`${client.member.mb_uid} <== ${sendPack}`);
 
-                sendPack = mCommon.makePack(mCommon.pk.MasterStateChanged, resArgs);
-                this.sendMsgToSlave(sendPack, client.member.category, client.member.mb_uid, true);
+                objPack = mCommon.makePack(mCommon.pk.MasterStateChanged, resArgs);
+                sendMsg = JSON.stringify(objPack);
+                this.sendMsgToSlave(objPack.id, sendMsg, client.member.category, client.member.mb_uid, false, true);
             }
-            else{
-                mCommon.log(`${client.session} <== ${sendPack}`);
-            } 
 
         }
+    }
+
+    async createPackMap(client){
+        
+        let member = client.member;
+        if(!member)
+            return;
+
+        try {
+
+            let categoryLock = null;
+            if(this.info.lockMap.has(member.category)){
+                categoryLock = this.info.lockMap.get(member.category);
+            } else {
+                categoryLock = new Map();
+                this.info.lockMap.set(member.category, categoryLock)
+            }
+
+            let memberLock = null;
+            if(categoryLock.has(member.mb_uid)){
+                memberLock = categoryLock.get(member.mb_uid);
+            } else {
+                memberLock = new Mutex();
+                categoryLock.set(member.mb_uid, memberLock);
+            }
+
+            let categoryPack = null;
+            if(this.packMap.has(member.category)){
+                categoryPack = this.packMap.get(member.category); 
+            } else{
+                categoryPack = new Map();
+                this.packMap.set(member.category, categoryPack);
+            }
+
+            let memberPack = null;
+            if(!categoryPack.has(member.mb_uid)){
+                memberPack = new Map();
+                categoryPack.set(member.mb_uid, memberPack);
+            } else {
+                memberPack = categoryPack.get(member.mb_uid); 
+
+                let msgs = [];
+                if(memberPack.size > 0){
+                    let releaseLock = null;
+                    try {
+                        releaseLock = await memberLock.acquire();
+                            for (let [id, objPack] of memberPack) {
+                                if(!objPack.delete){
+                                    objPack.delete = true;
+                                    msgs.push(`${objPack.msg}`);
+                                }
+                            }
+                        } catch(err) {
+                            mCommon.log(`<createPackMap> (${client.session}) mb_uid=${member.mb_uid} lock error : ${e}`, true);
+                        } finally {
+                            releaseLock();
+                        }
+                }
+
+                if(msgs.length > 0){
+
+                    for(let msg of msgs)
+                        client.send(msg);
+                }
+
+            } 
+        } catch(e){
+            mCommon.log(`<createPackMap> (${client.session}) mb_uid=${member.mb_uid} error : ${e}`, true);
+        }
+
+    }
+
+    pushPackMap(client, id, msg){
+
+        let member = client.member;
+        if(!member)
+            return;
+
+        try {
+
+            let categoryPack = null;
+            if(this.packMap.has(member.category)){
+                categoryPack = this.packMap.get(member.category); 
+            } else return;
+
+            let memberPack = null;
+            if(categoryPack.has(member.mb_uid)){
+                memberPack = categoryPack.get(member.mb_uid); 
+            } else return;
+
+            let tmNow = Date.now();
+            memberPack.set(id, {msg:msg, time:tmNow, delete:false});
+
+        } catch(e){
+            mCommon.log(`<pushPackMap> (${client.session}) mb_uid=${member.mb_uid} error : ${e}`, true);
+        }
+    }
+
+    popPackMap(client, id){
+
+        let member = client.member;
+        if(!member)
+            return;
+
+        try {
+
+            let categoryPack = null;
+            if(this.packMap.has(member.category)){
+                categoryPack = this.packMap.get(member.category); 
+            } else return;
+
+            let memberPack = null;
+            if(categoryPack.has(member.mb_uid)){
+                memberPack = categoryPack.get(member.mb_uid); 
+            } else return;
+
+            // mCommon.log(`<popPackMap> (${client.session}) mb_uid=${member.mb_uid} id=${id}`);
+
+            let objPack = memberPack.get(id);
+            if(objPack){
+                objPack.delete = true;
+                // mCommon.log(`<popPackMap> (${client.session}) objPack = ${JSON.stringify(objPack)}`);
+            }
+            
+        } catch(e){
+            mCommon.log(`<popPackMap> (${client.session}) mb_uid=${member.mb_uid} error : ${e}`, true);
+        }
+    }
+
+    async clearPackMap(client){
+
+        function clearPack(memberPack){
+            for (let [id, objPack] of memberPack) {
+                objPack.delete = true;
+            }
+        }
+
+        let member = client.member;
+        if(!member)
+            return;
+
+        try {
+
+            let categoryPack = null;
+            if(this.packMap.has(member.category)){
+                categoryPack = this.packMap.get(member.category); 
+            } else return;
+
+            let memberPack = null;
+            if(categoryPack.has(member.mb_uid)){
+                memberPack = categoryPack.get(member.mb_uid); 
+            } else return;
+
+            if(memberPack.size < 1)
+                return;
+
+            let memberLock = this.getMemberLock(member.category, member.mb_uid);
+
+            if(memberLock){
+                let releaseLock = null;
+                try {
+                        releaseLock = await memberLock.acquire();
+                        clearPack(memberPack);
+                    } catch(err) {
+                        mCommon.log(`<clearPackMap> (${client.session}) mb_uid=${member.mb_uid} lock error : ${e}`, true);
+                    } finally {
+                        releaseLock();
+                    }
+            } else {
+                clearPack(memberPack);
+            }
+
+        } catch(e){
+            mCommon.log(`<clearPackMap> (${client.session}) mb_uid=${member.mb_uid} error : ${e}`, true);
+        }
+    }
+
+    async procPackMap(){
+
+        function procPack(memberPack){
+            let cnt = 0;
+
+            try {
+
+                let deleteIds = [];
+                for (let [pid, objPack] of memberPack) {
+
+                    // mCommon.log(`<procPackMap> pack = ${JSON.stringify(objPack)}`);
+
+                    if(objPack.delete)
+                        deleteIds.push(pid);
+                    else if(tmNow - objPack.time > 600000){
+                        deleteIds.push(pid);
+                    }
+                    cnt ++;
+                }
+                if(deleteIds.length > 0){
+                    for(let pid of deleteIds){
+                        memberPack.delete(pid);
+                    }
+                }
+            } catch(e){
+                mCommon.log(`<procPackMap> error : ${e}`, true);
+            }
+            return cnt;
+        }
+
+        let tmNow = Date.now();
+        let cnt = 0;
+        for (let [cid, categoryPack] of this.packMap) {
+            for (let [mid, memberPack] of categoryPack) {
+
+                let memberLock = this.getMemberLock(cid, mid);
+                if(memberLock){
+                    let releaseLock = null;
+                    try {
+                            releaseLock = await memberLock.acquire();
+                            cnt += procPack(memberPack);
+                        } catch(err) {
+                            mCommon.log(`<procPackMap> (${client.session}) mb_uid=${member.mb_uid} lock error : ${e}`, true);
+                        } finally {
+                            releaseLock();
+                        }
+                } else {
+                    cnt += procPack(memberPack);
+                }
+            }    
+        }
+        mCommon.log(`<procPackMap> size = ${cnt}`, true);
+        
+    }
+
+    getMemberLock(category, mb_uid){
+        
+        let memberLock = null;
+        let categoryLock = this.info.lockMap.get(category);
+        if(categoryLock)
+            memberLock = categoryLock.get(mb_uid);
+        return memberLock;
     }
 
     async onSetMasterRequest(client, pack){
@@ -286,28 +532,23 @@ module.exports = class LoServer{
             
         }
         let resArgs = {result:result, code:code};
-        if(masterMember){
-            resArgs.tableId = masterMember.tableId;
-        }
-
-        let sendPack = mCommon.makePack(mCommon.pk.SetMasterResponse, resArgs);
-        client.send(sendPack);
+        
+        let objPack = mCommon.makePack(mCommon.pk.SetMasterResponse, resArgs);
+        let sendMsg = JSON.stringify(objPack);
+        client.send(sendMsg);
     }
     
     async onEnterTableRequest(client, pack){
         let args = pack.args;
         
-        // mCommon.log(`${client.member.mb_uid} ${client.isLogin}, ${args.tableId !== undefined}`);
-
         if(client.isLogin && args.tableId !== undefined){
             args.tableId = args.tableId.trim();
             client.member.tableId = args.tableId;
             let resArgs = {tableId:args.tableId};
                 
-            let sendPack = mCommon.makePack(mCommon.pk.OnEnterTableResponse, resArgs);
-            // mCommon.log(`${client.member.mb_uid} sendMsgToSlave <== OnEnterTableResponse`);
-
-            this.sendMsgToSlave(sendPack, client.member.category, client.member.mb_uid);
+            let objPack = mCommon.makePack(mCommon.pk.OnEnterTableResponse, resArgs);
+            let sendMsg = JSON.stringify(objPack);
+            this.sendMsgToSlave(objPack.id, sendMsg, client.member.category, client.member.mb_uid, true, true);
     
         }
     }
@@ -315,14 +556,21 @@ module.exports = class LoServer{
     async onBettingRequest(client, pack){
         let args = pack.args;
         
-        if(client.isLogin && args.tableId !== undefined && args.side !== undefined && args.money !== undefined){
+        if(client.isLogin && args.side !== undefined && args.money !== undefined){
             
-            let sendPack = mCommon.makePack(mCommon.pk.OnBettingResponse, args);
-            // mCommon.log(`${client.member.mb_uid} sendMsgToSlave <== onBettingRequest`);
-
-            this.sendMsgToSlave(sendPack, client.member.category, client.member.mb_uid);
+            let objPack = mCommon.makePack(mCommon.pk.OnBettingResponse, args);
+            let sendMsg = JSON.stringify(objPack);
+            this.sendMsgToSlave(objPack.id, sendMsg, client.member.category, client.member.mb_uid, true, true);
     
         }
+    }
+
+    async onMsgResponse(client, pack){
+        
+        if(pack.resId !== undefined){
+            this.popPackMap(client, pack.resId);
+        }
+        
     }
 
     isExistId(category, sess_id, uid){

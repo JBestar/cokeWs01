@@ -39,7 +39,6 @@ class Sess{
         let conn = await gDbAsynPool.getConnection(async conn => conn);
 
         let sql = `SELECT ${tbColum} FROM ${table} WHERE sess_id IN ( '${strIds}' ) `;
-        // mCommon.log( `sess >>  getByIds sql: ${sql}`);
         try{
             let [data, ] = await conn.execute(sql);
             await conn.unprepare(sql);
@@ -47,7 +46,6 @@ class Sess{
             return data;
         } catch(err){
             await conn.release();
-            // mCommon.log( `sess >>  getByIds Error: ${err}`);
             return null;
         }
     }

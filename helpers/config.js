@@ -36,7 +36,7 @@ module.exports = {
             // });
 
             gDbAsynPool = dbPool.promise();
-            mCommon.log(`connect Db`);   
+            mCommon.log(`<connect> Db`);   
         }
         // await gDbAsynConn.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED'); //sql default;
     },

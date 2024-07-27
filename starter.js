@@ -1,6 +1,7 @@
 const fs = require('fs')
 const http = require('http')
 const url = require('url')
+const ini = require('ini')
 const LoServer = require('./server/loserver')
 
 class Starter {
@@ -38,7 +39,7 @@ class Starter {
                     socket.destroy();
                 }
             } catch(e) {
-                mCommon.log(`wsserver connection error: ${e}`);   
+                mCommon.log(`<WsServer> connection error: ${e}`, true);   
             }
 
         });
@@ -50,15 +51,34 @@ class Starter {
 
 
     async check() {
+        this.readConfig();
 
-        // this.tkCheck = setInterval(async () => {
-            
-        // }, 5000);
+        this.tkLong = setInterval(() => {
 
-        // this.tkLong = setInterval(() => {
-        //     this.deleteLog();
-        // }, 24 * 3600 * 1000);
+            this.readConfig();
+            // this.deleteLog();
+        }, 60000);
 
+    }
+
+    async readConfig(){
+        try{
+
+            let text = fs.readFileSync(`./config.ini`, 'utf-8');
+
+            const config = ini.parse(text);
+            if(config.info){
+                if(config.info.log_level !== undefined){
+                    let logLv = parseInt(config.info.log_level);
+                    if(logLv != mCommon.def.LOG_LEVEL){
+                        mCommon.def.LOG_LEVEL = logLv;
+                        mCommon.log(`<readConfig> LOG_LEVEL = ${mCommon.def.LOG_LEVEL} `, true);
+                    }
+                }
+            }
+        } catch (err) {
+            mCommon.log(`<readConfig> err : ` + err, true);
+        }
     }
 
     async deleteLog(){

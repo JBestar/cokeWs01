@@ -31,7 +31,7 @@ module.exports = {
         STATE_WAIT:     4,
         STATE_HOT:      5,
 
-        WRITE_LOG : 0, //0-all 1-error, 2-no
+        LOG_LEVEL : 0, //0-all 1-error, 2-no
         LOG_DB: "db",
     },    
     pk: {
@@ -48,20 +48,22 @@ module.exports = {
         OnBettingRequest : 'onBettingRequest',
         OnBettingResponse : 'onBettingResponse',
 
+        OnMsgResponse : 'onMsgResponse',
+
         MetricsPing : 'metrics.ping',
         MetricsPong : 'metrics.pong',
     },
-    log: function (txt, name="", err=false, force=false) {
+    log: function (txt, force=false, err=false) {
         if(!force){
-            if(mCommon.def.WRITE_LOG == 2 && name.length > 0) // 
+            if(mCommon.def.LOG_LEVEL == 2) // 
                 return;
-            if(mCommon.def.WRITE_LOG == 1 && name.length > 0 && !err) // 
+            if(mCommon.def.LOG_LEVEL == 1 && !err) // 
                 return;
         }
             
         let fileName = toDate(new Date());
-        if(name.length > 0) 
-            fileName += "_" + name;
+        // if(name.length > 0) 
+        //     fileName += "_" + name;
         const filePath = "log/"+fileName+".log";
         const content = "[" + toTime(new Date()) + "] " + txt + "\n";
         try{
@@ -74,18 +76,12 @@ module.exports = {
             console.log(toTime(new Date()) + " log error!!");
         }
     },
-    makePack: function (type, args, table ='', resId = '', time = null) {
+    makePack: function (type, args, time = null) {
         var objPack = {type:type, args:args};
-        if(table.length > 0)
-            objPack.table = table;
-        if(resId.length > 0){
-            objPack.id = randStr(12);
-            objPack.resId = resId;
-        }
-        // else objPack.id = randStr(10);
+        objPack.id = randStr(12);
         if(time)
             objPack.time = time;
-        return JSON.stringify(objPack);
+        return objPack;
     },
     randString(length){
         return randStr(length);
