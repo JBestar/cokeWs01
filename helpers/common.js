@@ -33,25 +33,29 @@ module.exports = {
 
         LOG_LEVEL : 0, //0-all 1-error, 2-no
         LOG_DB: "db",
+
+        SAVE_PACK : false,
     },    
     pk: {
-        LoginRequest : 'loginRequest',
-        LoginResponse : 'loginResponse',
+        loginRequest : 'loginRequest',
+        loginResponse : 'loginResponse',
 
-        SetMasterRequest : 'setMasterRequest',
-        SetMasterResponse : 'setMasterResponse',
-        MasterStateChanged : 'masterStateChanged',
+        setMasterRequest : 'setMasterRequest',
+        setMasterResponse : 'setMasterResponse',
+        resetMasterRequest : 'resetMasterRequest',
+        resetMasterResponse : 'resetMasterResponse',
+        masterStateChanged : 'masterStateChanged',
         
-        OnEnterTableRequest : 'onEnterTableRequest',
-        OnEnterTableResponse : 'onEnterTableResponse',
+        onEnterTableRequest : 'onEnterTableRequest',
+        onEnterTableResponse : 'onEnterTableResponse',
 
-        OnBettingRequest : 'onBettingRequest',
-        OnBettingResponse : 'onBettingResponse',
+        onMessageRequest : 'onMessageRequest',
+        onMessageResponse : 'onMessageResponse',
 
-        OnMsgResponse : 'onMsgResponse',
+        onMessageAck : 'onMessageAck',
 
-        MetricsPing : 'metrics.ping',
-        MetricsPong : 'metrics.pong',
+        metricsPing : 'metrics.ping',
+        metricsPong : 'metrics.pong',
     },
     log: function (txt, force=false, err=false) {
         if(!force){
@@ -147,7 +151,8 @@ function toTime(dt){
     let hour = ("0" + dt.getHours()).slice(-2);
     let minute = ("0" + dt.getMinutes()).slice(-2);
     let seconds = ("0" + dt.getSeconds()).slice(-2);
-    return hour + ":" + minute + ":" + seconds;
+    let milliseconds = ("00" + dt.getMilliseconds()).slice(-3);
+    return hour + ":" + minute + ":" + seconds + "." + milliseconds;
 } 
 
 function randStr(length) {

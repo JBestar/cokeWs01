@@ -152,11 +152,8 @@ module.exports = class LoServer{
                     if(cat !== client.member.category){
                         if(cat.length > 0)
                             clientMap.set(cat, clientArr); 
-                        
+                        clientArr = [];
                         cat = client.member.category
-                        clientArr = clientMap.get(cat);
-                        if(!clientArr)
-                            clientArr = [];
                     }
                     clientArr.push(client);
                 }
@@ -240,7 +237,7 @@ module.exports = class LoServer{
 
                 if(master.id === masterId && master.cat === masterCat){
                     if(log)
-                        mCommon.log(`<SendMsgToSlave> (${client.session}) ${client.member.mb_uid} (from ${masterCat}>>${masterId}) <== ${msg}`);
+                        mCommon.log(`<SendMsgToSlave> (${client.session}) ${client.member.mb_uid} <== ${msg}`);
     
                     if(save){
                         this.pushPackMap(client, msgId, msg);
@@ -611,46 +608,28 @@ module.exports = class LoServer{
             } else {
                 let bNeedSet = false;
                 masterMember = this.getExistMember(masterCat, args.masterId);
-                if(masterMember === null) {
+                if(!masterMember) {
                     result = mCommon.def.STATUS_FAIL;
                     code = mCommon.def.CODE_OUT;
                     bNeedSet = true;
                 }
                 else if(masterMember.masters.length > 0){   //If already follow others, pass
-                    let i = 0;
-                    let master = null;
-                    let bDupl = false;
-                    while (i < masterMember.masters.length) {
-                        master = masterMember.masters[i];
-                        if (master.id === client.member.mb_uid && master.cat === client.member.category) {
-                            bDupl = true;
-                            break;
-                        } else i++;
-                    }
-
-                    if(bDupl){
-                        result = mCommon.def.STATUS_FAIL;
-                        code = mCommon.def.CODE_INVALID;
-                    } else {
-                        bNeedSet = true;
-                        result = mCommon.def.STATUS_SUCCESS;
-                        code = mCommon.def.CODE_OK;
-                    }
+                    result = mCommon.def.STATUS_FAIL;
+                    code = mCommon.def.CODE_INVALID;
                 } else {
-                    bNeedSet = true;
                     result = mCommon.def.STATUS_SUCCESS;
                     code = mCommon.def.CODE_OK;
+                    bNeedSet = true;
                 }
 
                 if(bNeedSet){
-
                     let bExist = false;
                     let i = 0;
                     let master = null;
                     while (i < client.member.masters.length) {
                         master = client.member.masters[i];
                         if (master.id === args.masterId && master.cat === masterCat) {
-                            // client.member.masters.splice(i, 1);     //delete 1 item
+                            client.member.masters.splice(i, 1);
                             bExist = true;
                             break;
                         } else i++;
@@ -765,8 +744,6 @@ module.exports = class LoServer{
             if(! client.isLogin)
                 continue;
             
-            // mCommon.log(`<isExistId> (${client.session}) ${client.member.category}, ${client.member.mb_uid}, state = ${client.readyState}`);
-
             if(client.member.category === category && client.member.sess_id === sess_id && client.member.mb_uid === uid ){
                 return true;
             }
@@ -785,11 +762,8 @@ module.exports = class LoServer{
             if(! client.isLogin)
                 continue;
             
-            // mCommon.log(`<getExistMember> (${client.session}) ${client.member.category}, ${client.member.mb_uid}, state=${client.readyState} check=${category}, ${uid}`);
-
             if(client.member.category == category && client.member.mb_uid === uid ){
                 member = client.member;
-                // mCommon.log(`<getExistMember> 2 (${client.session}) ${client.member.category}, ${client.member.mb_uid}, state=${client.readyState} check=${category}, ${uid}`);
                 break;
             }
         }

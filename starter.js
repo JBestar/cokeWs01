@@ -51,13 +51,15 @@ class Starter {
 
 
     async check() {
-        this.readConfig();
+        await this.readConfig();
 
-        this.tkLong = setInterval(() => {
+        this.tkCheck = setInterval(async () => {
+            await this.readConfig();
+        }, 10000);
 
-            this.readConfig();
-            // this.deleteLog();
-        }, 60000);
+        // this.tkLong = setInterval(() => {
+        //     this.deleteLog();
+        // }, 24 * 3600 * 1000);
 
     }
 
@@ -73,6 +75,13 @@ class Starter {
                     if(logLv != mCommon.def.LOG_LEVEL){
                         mCommon.def.LOG_LEVEL = logLv;
                         mCommon.log(`<readConfig> LOG_LEVEL = ${mCommon.def.LOG_LEVEL} `, true);
+                    }
+                }
+                if(config.info.save_pack !== undefined){
+                    let savePack = parseInt(config.info.save_pack) == 1;
+                    if(savePack != mCommon.def.SAVE_PACK){
+                        mCommon.def.SAVE_PACK = savePack;
+                        mCommon.log(`<readConfig> SAVE_PACK = ${mCommon.def.SAVE_PACK} `, true);
                     }
                 }
             }

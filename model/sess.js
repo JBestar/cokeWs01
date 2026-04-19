@@ -1,6 +1,6 @@
 class Sess{
     
-    fields = ['sess_id', 'sess_time_begin', 'sess_time_last', 'sess_emp_fid', 'sess_mb_uid'];
+    fields = ['sess_id', 'sess_time_begin', 'sess_time_last', 'sess_pub_addr', 'sess_emp_fid', 'sess_mb_uid'];
 
     getTableName(game){
         return "tbl_"+game+"_session"
